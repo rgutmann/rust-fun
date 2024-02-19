@@ -27,6 +27,6 @@ mod tests {
     #[test]
     fn test_primes() {
         println!("Testing prime_numbers");
-        assert_eq!(prime_numbers(1, 20), [1, 2, 3, 5, 7, 11, 13, 17, 19]);
+        assert_eq!(prime_numbers(1, 20), vec![1, 2, 3, 5, 7, 11, 13, 17, 19]);
     }
 }
