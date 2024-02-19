@@ -9,6 +9,7 @@ use std::time::Duration;
 use tokio::sync::Semaphore;
 use tokio::task;
 use crate::prime_numbers_with_primes;
+use crate::primes_fun::MathError;
 
 #[derive(Debug, Clone, Eq)]
 struct BlockResult {
@@ -34,7 +35,11 @@ impl Hash for BlockResult {
 ///  - multi thread/task mpsc channel communication
 ///  - using custom impls for HashMap objects
 ///  - concurrent access to a central HashMap storage
-pub async fn prime_numbers_with_tokio(start: u32, end: u32, block_size: usize) -> Vec<u32> {
+pub async fn prime_numbers_with_tokio(start: u32, end: u32, block_size: usize) -> Result<Vec<u32>, MathError> {
+
+    if start > end {
+        return Err(MathError::EndBeforeStart);
+    }
 
     // create reference counter for limiting worker task count to number of cpu cores
     let num_cpus = num_cpus::get();
@@ -109,7 +114,7 @@ pub async fn prime_numbers_with_tokio(start: u32, end: u32, block_size: usize) -
                     loop { // over all precalc_blocks
 
                         // get new block, wait for it if necessary
-                        if wait {
+                        if wait { // shouldn't happen, except when a follow-up-task is much faster
                             println!("  - block {block_start} waiting for precalc block {needed_precalc_block_start}");
                             tokio::time::sleep(Duration::from_millis(10)).await;
                             wait = false;
@@ -130,7 +135,6 @@ pub async fn prime_numbers_with_tokio(start: u32, end: u32, block_size: usize) -
 
                             // use precalc block content and always check if we're finished with this prime calc
                             // iterate through precalc_block until end of it is reached
-                            // TODO move this to task::spawn_blocking() ?!?!
                             for precalc_prime in precalc_block_clone {
                                 // test prime_to_check against precalc_prime
                                 if precalc_prime != 1 && prime_to_check % precalc_prime == 0 {
@@ -205,7 +209,7 @@ pub async fn prime_numbers_with_tokio(start: u32, end: u32, block_size: usize) -
             }
         }
     }
-    full_result
+    Ok(full_result)
 }
 
 #[cfg(test)]
@@ -215,18 +219,18 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
-    #[tokio::test]
-    async fn test_primes_redis() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+    async fn test_primes_tokio() {
         println!("Testing prime_numbers with tokio");
         let result = prime_numbers_with_tokio(1, 100000, 20000).await;
-        assert_eq!(result, prime_numbers_with_primes(100000));
+        assert_eq!(result, Ok(prime_numbers_with_primes(100000)));
 
         let start_tokio = Instant::now();
-        let result = prime_numbers_with_tokio(1234, 198765, 20000).await;
+        let result = prime_numbers_with_tokio(123456, 987654, 50000).await;
         let duration_tokio_millis = Instant::now().duration_since(start_tokio).as_millis();
         let start_prime = Instant::now();
-        assert_eq!(result, prime_numbers_with_primes_between(1234, 198765).unwrap());
+        assert_eq!(result, prime_numbers_with_primes_between(123456, 987654));
         let duration_prime_millis = Instant::now().duration_since(start_prime).as_millis();
-        println!("<- Calculation of {} prime numbers took {}ms with tokio and {}ms without\n", format_number(result.len() as u32), duration_tokio_millis, duration_prime_millis);
+        println!("<- Calculation of {} prime numbers took {}ms with tokio and {}ms without\n", format_number(result.unwrap().len() as u32), duration_tokio_millis, duration_prime_millis);
     }
 }

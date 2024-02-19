@@ -64,4 +64,5 @@ async fn main() {
     if debug { println!("Prime numbers found: {:?}", primes_result); }
     println!("<- Calculation of {} prime numbers took {}ms\n", format_number(primes_result.len() as u32), duration_prime_millis);
 
+    // TODO start tokio runtime and use it
 }
