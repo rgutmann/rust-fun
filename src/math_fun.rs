@@ -1,7 +1,7 @@
 
 pub fn prime_numbers(start: i32, end: i32) -> Vec<i32> {
     let mut result = Vec::with_capacity(1000);
-    for i in start..end {
+    for i in start..(end+1) {
         let mut found: bool = true;
 
         for j in 2..(i / 2 + 1) {
