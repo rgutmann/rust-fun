@@ -1,9 +1,9 @@
 
 use super::*;
-use mini_redis::blocking_client;
+//use mini_redis::blocking_client;
 
 /// Generating prime numbers with the simple optimization that only dividers until number / 2 need to be checked.
-pub fn prime_numbers_redis(end: u32) -> Result<Vec<u32>, MathError> {
+pub fn prime_numbers_redis(_end: u32) -> Result<Vec<u32>, MathError> {
     Err(MathError::NotImplemented)
 }
 
