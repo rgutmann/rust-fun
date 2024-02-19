@@ -1,13 +1,12 @@
 use std::thread;
 use std::option::Option::{ Some, None };
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::sync::mpsc::{Sender, Receiver};
-use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 use tokio::sync::Semaphore;
 use tokio::task;
+use chashmap::{CHashMap};
 use crate::prime_numbers_with_primes;
 use crate::primes_fun::MathError;
 
@@ -47,7 +46,7 @@ pub async fn prime_numbers_with_tokio(start: u32, end: u32, block_size: usize) -
     let sem = Arc::new(Semaphore::new(num_cpus));
 
     // create central storage
-    let db :Arc<Mutex<HashMap<u32, Option<Vec<u32>>>>> = Arc::new(Mutex::new(HashMap::new()));
+    let db :Arc<CHashMap<u32, Option<Vec<u32>>>> = Arc::new(CHashMap::new());
 
     // create send/receiver for channel communication between worker tasks and storage thread
     let (tx, rx) :(Sender<BlockResult>, Receiver<BlockResult>) = mpsc::channel();
@@ -64,11 +63,11 @@ pub async fn prime_numbers_with_tokio(start: u32, end: u32, block_size: usize) -
                         None => println!("-DB received block {:?} for which calculation started", result.block_start)
                     }
                     // insert/update to storage in any case
-                    let mut db = db_handle.lock().unwrap();
-                    db.insert(result.block_start, result.result);
+                    db_handle.insert(result.block_start, result.result);
                 },
-                Err(error) => {
-                    println!("received error {:?}", error);
+                Err(_error) => {
+                    // normal at the end -> ignore
+                    //println!("received error {:?}", error);
                     break;
                 }
             };
@@ -100,74 +99,60 @@ pub async fn prime_numbers_with_tokio(start: u32, end: u32, block_size: usize) -
             } else {
 
                 // I'm not the first and will use previous precalc_block results
-                for prime_to_check in block_start..block_end {
+                'next_prime: for prime_to_check in block_start..block_end {
 
-                    let mut prime_found: bool = true;
                     let max_divider = (prime_to_check / 2) + 1;
 
                     // always start with the first precalc block and then work upwards
                     // check if I am this block => the first and last block...
                     let mut needed_precalc_block_start = 1;
-                    let mut wait = false;
 
                     // I'm not the first and will use previous precalc_blocks
-                    loop { // over all precalc_blocks
+                    'next_block: loop { // over all precalc_blocks
 
-                        // get new block, wait for it if necessary
-                        if wait { // shouldn't happen, except when a follow-up-task is much faster
-                            println!("  - block {block_start} waiting for precalc block {needed_precalc_block_start}");
+                        'read_block: loop {
+                            let potential_readguard_precalc_block = db_handle.get(&needed_precalc_block_start);
+
+                            if let Some(readguard_precalc_block) = potential_readguard_precalc_block {
+                                if let Some(precalc_block) = readguard_precalc_block.as_ref() {
+                                    // use precalc block content and always check if we're finished with this prime calc
+                                    // iterate through precalc_block until end of it is reached
+                                    for precalc_prime in precalc_block {
+                                        // test prime_to_check against precalc_prime
+                                        if *precalc_prime != 1 && prime_to_check % *precalc_prime == 0 {
+                                            // prime_to_check is not a prime
+                                            continue 'next_prime; // into next prime
+                                        }
+                                        // always check if prime calc is finished yet
+                                        if *precalc_prime > max_divider {
+                                            // current precalc_prime exceeds max_divider
+                                            break 'read_block; // into next prime
+                                        }
+                                    }
+                                    // end of precalc_block reading & usage - we're done here
+                                    break 'read_block; // into next block
+                                }
+                            }
+                            // precalc_block is not (yet) found or already in calculation - wait for it...
+                            //println!("  - block {block_start} waiting for precalc block {needed_precalc_block_start}");
                             tokio::time::sleep(Duration::from_millis(10)).await;
-                            wait = false;
-                        }
-                        loop {
-                            let precalc_block_clone :Vec<u32>;
-                            match db_handle.lock().unwrap().get(&needed_precalc_block_start) {
-                                None | Some(None) => {
-                                    // precalc_block not found or in calculation
-                                    wait = true;
-                                    continue; // continue waiting for this precalc_block
-                                },
-                                Some(Some(ref precalc_block_result)) => {
-                                    precalc_block_clone = (*precalc_block_result).clone();
-                                    //println!("  - block {block_start} now loaded precalc block {needed_precalc_block_start}");
-                                }
-                            }
-
-                            // use precalc block content and always check if we're finished with this prime calc
-                            // iterate through precalc_block until end of it is reached
-                            for precalc_prime in precalc_block_clone {
-                                // test prime_to_check against precalc_prime
-                                if precalc_prime != 1 && prime_to_check % precalc_prime == 0 {
-                                    // prime_to_check is not a prime
-                                    prime_found = false;
-                                    break;
-                                }
-                                // always check if prime calc is finished yet
-                                if precalc_prime > max_divider {
-                                    break;
-                                }
-                            }
-                            // end of precalc_block reading & usage - we're done here
-                            break; // into next block reading
-
                         } // end of loop over block reading
 
-                        if !prime_found || (needed_precalc_block_start + (block_size as u32)) > max_divider {
-                            break; // either no prime or finished with checking this prime
+                        if (needed_precalc_block_start + (block_size as u32)) > max_divider {
+                            // next precalc_block_start would exceed max_divider
+                            // println!("  - found prime {prime_to_check}");
+                            result.push(prime_to_check);
+                            continue 'next_prime;
                         }  else {
                             // if not finished, get next block for next round
                             needed_precalc_block_start = needed_precalc_block_start + (block_size as u32);
-                            continue; // with next block
+                            continue 'next_block;
                         }
 
                     } // end of loop over all precalced blocks
 
-                    if prime_found {
-                        //println!("  - found prime {prime_to_check}");
-                        result.push(prime_to_check);
-                    }
-
                 } // end of loop over all primes to check
+
             } // end of block to check
 
             println!("Finished {}..{} primes block", block_start, block_end);
@@ -196,20 +181,23 @@ pub async fn prime_numbers_with_tokio(start: u32, end: u32, block_size: usize) -
     println!("Collecting blocks from {first_block_start} to {last_block_start} with step {block_size}");
     let db_handle = db.clone();
     for block_start in (first_block_start..=last_block_start).step_by(block_size) {
-        match db_handle.lock().unwrap().get(&block_start) {
-            None | Some(None) => {
-                // precalc_block not found or in calculation
-                panic!("block {} not found after calc is finished?!? this should never happen!", block_start)
-            },
-            Some(Some(ref precalc_block_result)) => {
-                println!("  - now working with precalc block {} with {} primes", block_start, (*precalc_block_result).len());
-                (*precalc_block_result).iter()
+        let potential_readguard_prime_block = db_handle.get(&block_start);
+        if let Some(readguard_prime_block) = potential_readguard_prime_block {
+            if let Some(prime_block) = readguard_prime_block.as_ref() {
+                println!("  - now working with precalc block {} with {} primes", block_start, (*prime_block).len());
+                (*prime_block).iter()
                     .filter(|x|{ *x >= &start && *x <= &end })
                     .for_each(|x| { full_result.push(*x) });
+            } else {
+                panic!("block {} not finished after calc is finished?!? this should never happen!", block_start)
             }
+        } else {
+                panic!("block {} not found after calc is finished?!? this should never happen!", block_start)
         }
     }
+    // return result
     Ok(full_result)
+
 }
 
 #[cfg(test)]
@@ -228,6 +216,7 @@ mod tests {
         let start_tokio = Instant::now();
         let result = prime_numbers_with_tokio(123456, 987654, 50000).await;
         let duration_tokio_millis = Instant::now().duration_since(start_tokio).as_millis();
+        println!("... now calculating the same without tokio ...");
         let start_prime = Instant::now();
         assert_eq!(result, prime_numbers_with_primes_between(123456, 987654));
         let duration_prime_millis = Instant::now().duration_since(start_prime).as_millis();

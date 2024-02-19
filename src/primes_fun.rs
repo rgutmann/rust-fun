@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 mod primes_redis_fun;
-mod primes_tokio_fun;
+pub mod primes_tokio_fun;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MathError {
