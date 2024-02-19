@@ -69,7 +69,7 @@ pub fn prime_numbers_with_primes_between(start: u32, end: u32) -> Result<Vec<u32
     let result = prime_numbers_with_primes(end);
     let mut index = 0;
     for (i, x) in result.iter().enumerate() {
-        if *x > start {
+        if *x >= start {
             index = i;
             break;
         }
@@ -84,6 +84,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_primes() {
+        println!("Testing prime_numbers");
+        assert_eq!(prime_numbers(20), vec![1, 2, 3, 5, 7, 11, 13, 17, 19]);
+    }
+
+    #[test]
     fn test_primes_between() {
         println!("Testing prime_numbers_between");
         assert_eq!(prime_numbers_between(20, 1).err().expect("error returned"), MathError::EndBeforeStart);
@@ -92,15 +98,16 @@ mod tests {
     }
 
     #[test]
-    fn test_primes() {
-        println!("Testing prime_numbers");
-        assert_eq!(prime_numbers(20), vec![1, 2, 3, 5, 7, 11, 13, 17, 19]);
+    fn test_primes_with_primes() {
+        println!("Testing prime_numbers_with_primes");
+        assert_eq!(prime_numbers_with_primes(1000), prime_numbers_between(1, 1000).expect("no primes returned"));
     }
 
     #[test]
-    fn test_primes_with_primes() {
-        println!("Testing prime_numbers_with_primes");
-        assert_eq!(prime_numbers_with_primes(1000), prime_numbers_between(1, 1000).expect("primes returned"));
-        assert_eq!(prime_numbers_with_primes_between(100, 1000).expect("primes returned"), prime_numbers_between(100, 1000).expect("primes returned"));
+    fn test_primes_with_primes_between() {
+        println!("Testing prime_numbers_with_primes_between");
+        assert_eq!(prime_numbers_with_primes_between(20, 1).err().expect("no error returned"), MathError::EndBeforeStart);
+        assert_eq!(prime_numbers_with_primes_between(1, 100).expect("no primes returned"), prime_numbers_between(1, 100).expect("no primes returned"));
+        assert_eq!(prime_numbers_with_primes_between(100, 1000).expect("no primes returned"), prime_numbers_between(100, 1000).expect("no primes returned"));
     }
 }
