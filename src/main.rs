@@ -1,7 +1,9 @@
 extern crate chrono;
+extern crate core;
 
 mod primes_fun;
-use primes_fun::*;
+
+use primes_fun::{prime_numbers, prime_numbers_between, prime_numbers_with_primes, prime_numbers_with_primes_between};
 
 use chrono::Local;
 use num_format::{Locale, ToFormattedString};
@@ -23,7 +25,9 @@ impl U32 for u32 {
     }
 }
 */
-fn main() {
+
+#[tokio::main]
+async fn main() {
     let debug = false;
 
     let end = 10000u32;

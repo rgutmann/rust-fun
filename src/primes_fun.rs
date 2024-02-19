@@ -1,11 +1,15 @@
 #![allow(dead_code)]
 
+mod primes_redis_fun;
+mod primes_tokio_fun;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MathError {
     EndBeforeStart,
+    NotImplemented,
 }
 
-/// Generating prime numbers with the simple optimization that only dividers until number / 2 need to be checked.
+/// Generating prime numbers with the simple optimization that only dividers until number / 2 need to be checked. Now using Result<> errors.
 pub fn prime_numbers_between(start: u32, end: u32) -> Result<Vec<u32>, MathError> {
     if start > end {
         return Err(MathError::EndBeforeStart);
@@ -37,6 +41,7 @@ pub fn prime_numbers(end: u32) -> Vec<u32> {
 
 /// Generating prime numbers with the optimization that only prime dividers need to be checked.
 pub fn prime_numbers_with_primes(end: u32) -> Vec<u32> {
+    // Calculate primes sequentially, but use the already calculated ones as primes cache
     let mut result = Vec::with_capacity(1024);
     for i in 1..(end + 1) {
         let mut found: bool = true;
@@ -60,12 +65,13 @@ pub fn prime_numbers_with_primes(end: u32) -> Vec<u32> {
     result
 }
 
-///  Generating prime numbers with the optimization that only prime dividers need to be checked.
+///  Generating prime numbers with the optimization that only prime dividers need to be checked. Now using Result<> errors.
 pub fn prime_numbers_with_primes_between(start: u32, end: u32) -> Result<Vec<u32>, MathError> {
     if start > end {
         return Err(MathError::EndBeforeStart);
     }
 
+    // Calculate all primes until end and remove the ones before start
     let result = prime_numbers_with_primes(end);
     let mut index = 0;
     for (i, x) in result.iter().enumerate() {
@@ -80,7 +86,6 @@ pub fn prime_numbers_with_primes_between(start: u32, end: u32) -> Result<Vec<u32
 
 #[cfg(test)]
 mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
     #[test]
