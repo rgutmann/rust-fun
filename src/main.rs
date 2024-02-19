@@ -9,6 +9,7 @@ use chrono::Local;
 use num_format::{Locale, ToFormattedString};
 use std::time::Instant;
 
+#[allow(unused_macros)]
 macro_rules! dbg {
     ($x:expr) => {
         println!("{} = {:?}",stringify!($x),$x);
