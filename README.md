@@ -10,4 +10,4 @@ This project is my usual way on how to learn a new programming language:
 
 ## Demo execution
 
-![Demo GIF](./path/to/your/gif.gif)
+![Demo GIF](./rust-fun.gif)
